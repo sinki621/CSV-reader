@@ -1,0 +1,33 @@
+{
+  "name": "csv-chart-viewer",
+  "version": "1.0.0",
+  "author": "KI.Shin",
+  "description": "High Performance CSV Chart Analyzer",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron --js-flags=\"--max-old-space-size=8192\" .",
+    "package": "electron-builder --win"
+  },
+  "dependencies": {
+    "uplot": "^1.6.30",
+    "papaparse": "^5.4.1",
+    "flatpickr": "^4.6.13"
+  },
+  "devDependencies": {
+    "electron": "28.2.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "productName": "CSV chart viewer",
+    "asar": true,
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "csv_viewer.ico"
+    }
+  }
+}
