@@ -13,46 +13,25 @@ let isDualY = false;
 
 const LIN_THRESH = 1e-12; 
 
-function symlog(v) {
-    return Math.asinh(v / LIN_THRESH);
-}
-
-function invSymlog(v) {
-    return Math.sinh(v) * LIN_THRESH;
-}
+function symlog(v) { return Math.asinh(v / LIN_THRESH); }
+function invSymlog(v) { return Math.sinh(v) * LIN_THRESH; }
 
 function switchMode(mode) {
-    if (chart) { 
-        currentXMin = chart.scales.x.min; 
-        currentXMax = chart.scales.x.max; 
-    }
+    if (chart) { currentXMin = chart.scales.x.min; currentXMax = chart.scales.x.max; }
     currentMode = mode;
-    const modeButtons = { 'zoom': 'zoomModeBtn', 'pan': 'panModeBtn', 'diff': 'diffModeBtn' };
-    Object.keys(modeButtons).forEach(key => {
-        const btn = document.getElementById(modeButtons[key]);
-        if (btn) btn.style.background = (key === mode) ? '#e67e22' : '#2980b9';
+    const btns = { 'zoom': 'zoomModeBtn', 'pan': 'panModeBtn', 'diff': 'diffModeBtn' };
+    Object.keys(btns).forEach(k => {
+        const b = document.getElementById(btns[k]);
+        if (b) b.style.background = (k === mode) ? '#e67e22' : '#2980b9';
     });
-    if (mode === 'diff') { 
-        diffPoints = []; 
-        document.getElementById('pinned-data').innerHTML = "<b>Diff Mode:</b> Click two points on chart."; 
-    }
+    if (mode === 'diff') { diffPoints = []; document.getElementById('pinned-data').innerHTML = "<b>Diff Mode:</b> Click 두 점."; }
     if (chart) renderChart();
 }
-
-const tooltip = document.createElement("div");
-tooltip.className = "u-tooltip";
-tooltip.style = "display:none; position:absolute; background:rgba(255,255,255,0.95); border:2px solid #34495e; border-radius:4px; padding:10px; pointer-events:none; z-index:100; font-size:12px; color:#333; box-shadow:3px 3px 10px rgba(0,0,0,0.3);";
-document.body.appendChild(tooltip);
 
 window.onload = () => {
     switchMode('zoom');
     window.addEventListener("resize", () => {
-        if (chart) {
-            chart.setSize({
-                width: document.getElementById('chart-area').offsetWidth,
-                height: document.getElementById('chart-area').offsetHeight
-            });
-        }
+        if (chart) chart.setSize({ width: document.getElementById('chart-area').offsetWidth, height: document.getElementById('chart-area').offsetHeight });
     });
 };
 
@@ -60,9 +39,9 @@ document.getElementById('loadBtn').onclick = async () => {
     const filePath = await ipcRenderer.invoke('open-file');
     if (!filePath) return;
     const status = document.getElementById('status');
-    status.innerText = "Initializing...";
+    status.innerText = "Loading...";
     if (chart) { chart.destroy(); chart = null; }
-    uData = []; normData = []; currentXMin = null; currentXMax = null;
+    uData = []; normData = [];
     setTimeout(() => loadHugeFile(filePath, status), 50);
 };
 
@@ -73,31 +52,25 @@ async function loadHugeFile(filePath, status) {
     let lastValues; 
 
     stream.on('data', (chunk) => {
-        const text = leftover + chunk;
-        const lines = text.split(/\r?\n/);
+        const lines = (leftover + chunk).split(/\r?\n/);
         leftover = lines.pop();
-        for (let i = 0; i < lines.length; i++) {
-            const line = lines[i].trim();
-            if (!line) continue;
-            const cells = line.split(',');
+        for (let line of lines) {
+            const cells = line.trim().split(',');
+            if (!cells[0]) continue;
             if (rowCount === 0) {
                 columns = cells.map(c => c.trim());
                 uData = columns.map(() => []);
                 lastValues = new Float64Array(columns.length).fill(0);
-                rowCount++;
-                continue;
+                rowCount++; continue;
             }
             const timeVal = Date.parse(cells[0]) / 1000;
             if (isNaN(timeVal)) continue;
             uData[0].push(timeVal);
             for (let j = 1; j < columns.length; j++) {
-                const rawVal = cells[j] ? cells[j].trim() : "";
-                if (rawVal === "") { uData[j].push(lastValues[j]); }
-                else {
-                    const parsed = parseFloat(rawVal);
-                    if (isNaN(parsed)) { uData[j].push(lastValues[j]); }
-                    else { uData[j].push(parsed); lastValues[j] = parsed; }
-                }
+                const val = parseFloat(cells[j]);
+                const finalVal = isNaN(val) ? lastValues[j] : val;
+                uData[j].push(finalVal);
+                lastValues[j] = finalVal;
             }
             rowCount++;
         }
@@ -105,22 +78,18 @@ async function loadHugeFile(filePath, status) {
     });
 
     stream.on('end', () => {
-        for (let i = 0; i < uData.length; i++) { uData[i] = new Float64Array(uData[i]); }
-        dataMinTime = uData[0][0];
-        dataMaxTime = uData[0][uData[0].length - 1];
+        uData = uData.map(arr => new Float64Array(arr));
+        dataMinTime = uData[0][0]; dataMaxTime = uData[0][uData[0].length - 1];
         initDatePickers(dataMinTime, dataMaxTime);
-        fpStart.setDate(new Date(dataMinTime * 1000));
-        fpEnd.setDate(new Date(dataMaxTime * 1000));
-        createSidebar(); 
-        renderChart();
-        status.innerText = `Done: ${(uData[0].length).toLocaleString()} rows loaded.`;
+        createSidebar(); renderChart();
+        status.innerText = `Loaded: ${uData[0].length.toLocaleString()} rows`;
     });
 }
 
 function renderChart() {
     const container = document.getElementById('chart-area');
-    const overlayLegend = document.getElementById('overlay-legend');
-    if (!container || !uData[0] || uData[0].length === 0) return;
+    const overlay = document.getElementById('overlay-legend');
+    if (!container || !uData[0]) return;
     if (chart) chart.destroy();
     container.innerHTML = '';
 
@@ -129,73 +98,34 @@ function renderChart() {
     let activeData = isNorm ? (normData.length ? normData : prepareNormalizedData()) : (isSymlog ? uData.map((s, i) => i === 0 ? s : s.map(v => symlog(v))) : uData);
 
     const opts = {
-        width: container.offsetWidth - 20,
-        height: container.offsetHeight - 20,
+        width: container.offsetWidth - 20, height: container.offsetHeight - 20,
         legend: { show: false },
         cursor: { 
             drag: { setScale: currentMode === 'zoom', x: currentMode === 'zoom', y: false },
-            points: { size: 10, fill: (u, si) => u.series[si].stroke + "44", stroke: (u, si) => u.series[si].stroke },
             focus: { prox: 50 }
         },
         hooks: {
             setCursor: [u => {
-                const { left, top, idx } = u.cursor;
-                if (idx == null || left < 0) { 
-                    overlayLegend.style.display = "none"; 
-                    tooltip.style.display = "none";
-                    return; 
-                }
-
-                const timeStr = uPlot.fmtDate("{YYYY}-{MM}-{DD} {HH}:{mm}:{ss}")(new Date(uData[0][idx] * 1000));
-                let legendHtml = `<div class="ol-time">${timeStr}</div>`;
-                let hasActive = false;
-
-                // 실시간 범례 구성
-                columns.slice(1).forEach((name, i) => {
-                    const seriesIdx = i + 1;
-                    if (u.series[seriesIdx].show) {
-                        hasActive = true;
-                        const val = uData[seriesIdx][idx];
-                        const formattedVal = val === 0 ? "0e0" : val.toExponential(4).replace('+', '');
-                        const color = u.series[seriesIdx].stroke;
-                        
-                        legendHtml += `
-                            <div class="ol-item">
-                                <div class="ol-dot" style="background:${color}"></div>
-                                <span class="ol-label">${name}</span>
-                                <span class="ol-value">${formattedVal}</span>
-                            </div>`;
+                if (u.cursor.left < 0) { overlay.style.display = "none"; return; }
+                let html = "";
+                u.series.forEach((s, i) => {
+                    if (i > 0 && s.show) {
+                        html += `<div class="ol-item"><div class="ol-dot" style="background:${s.stroke}"></div>${s.label}</div>`;
                     }
                 });
-
-                if (hasActive) {
-                    overlayLegend.innerHTML = legendHtml;
-                    overlayLegend.style.display = "block";
-                } else {
-                    overlayLegend.style.display = "none";
-                }
+                overlay.innerHTML = html;
+                overlay.style.display = html ? "block" : "none";
             }],
             init: [u => {
                 u.over.addEventListener("mousedown", e => {
-                    if (e.button !== 0) return; 
+                    if (e.button !== 0 || u.cursor.idx == null) return;
                     const idx = u.cursor.idx;
-                    if (idx != null) {
-                        let html = `<span style="background: #34495e; color: white; padding: 2px 10px; border-radius: 4px; margin-right: 15px; font-weight: bold;">
-                                        ${uPlot.fmtDate("{YYYY}-{MM}-{DD} {HH}:{mm}:{ss}")(new Date(uData[0][idx] * 1000))}
-                                    </span>`;
-                        columns.slice(1).forEach((name, i) => {
-                            if (u.series[i + 1].show) {
-                                const val = uData[i+1][idx];
-                                const rawExpVal = val === 0 ? "0e0" : val.toExponential().replace('+', '');
-                                html += `<span style="display: inline-block; margin-right: 18px; border-bottom: 2px solid ${u.series[i+1].stroke};">
-                                            <b style="color: #444;">${name}:</b> 
-                                            <span style="color: ${u.series[i+1].stroke}; font-family: monospace; font-weight: bold; margin-left: 4px;">${rawExpVal}</span>
-                                         </span>`;
-                            }
-                        });
-                        document.getElementById('pinned-data').innerHTML = html;
-                    }
-                    if (currentMode === 'diff' && idx != null) {
+                    let html = `<span style="background:#34495e;color:#fff;padding:2px 8px;border-radius:4px;margin-right:10px;">${uPlot.fmtDate("{YYYY}-{MM}-{DD} {HH}:{mm}:{ss}")(new Date(uData[0][idx]*1000))}</span>`;
+                    columns.slice(1).forEach((name, i) => {
+                        if (u.series[i+1].show) html += `<span style="margin-right:15px;border-bottom:2px solid ${u.series[i+1].stroke};"><b>${name}:</b> ${uData[i+1][idx].toExponential(2)}</span>`;
+                    });
+                    document.getElementById('pinned-data').innerHTML = html;
+                    if (currentMode === 'diff') {
                         diffPoints.push({ time: uData[0][idx], vals: columns.slice(1).map((_, i) => uData[i+1][idx]) });
                         if (diffPoints.length > 2) diffPoints.shift();
                         updateDiffDisplay();
@@ -203,28 +133,15 @@ function renderChart() {
                 });
             }]
         },
-        scales: {
-            x: { time: true, min: currentXMin || dataMinTime, max: currentXMax || dataMaxTime },
-            y: { auto: true },
-            y2: { auto: true }
-        },
-        series: [
-            { label: "Time" },
-            ...columns.slice(1).map((name, i) => {
-                const isChecked = document.getElementById(`ch-${i}`)?.checked || false;
-                return {
-                    label: name,
-                    show: isChecked,
-                    stroke: `hsl(${(i * 137.5) % 360}, 70%, 50%)`,
-                    width: 1.5,
-                    scale: isDualY && isChecked ? (Array.from(document.querySelectorAll('.col-ch')).slice(0, i).filter(c => c.checked).length === 0 ? 'y' : 'y2') : 'y'
-                };
-            })
-        ],
+        scales: { x: { time: true, min: currentXMin || dataMinTime, max: currentXMax || dataMaxTime }, y: { auto: true }, y2: { auto: true } },
+        series: [{ label: "Time" }, ...columns.slice(1).map((name, i) => {
+            const isChecked = document.getElementById(`ch-${i}`)?.checked ?? false;
+            return { label: name, show: isChecked, stroke: `hsl(${(i * 137.5) % 360}, 70%, 50%)`, width: 1.5, scale: isDualY && isChecked ? 'y2' : 'y' };
+        })],
         axes: [
-            { space: 60, values: [[3600*24*365, "{YYYY}"], [3600*24, "{MM}-{DD}"], [3600, "{HH}:{mm}"], [1, "{HH}:{mm}:{ss}"]] },
-            { scale: 'y', size: 90, stroke: isDualY ? "#2980b9" : "#333", values: (u, vals) => vals.map(v => isNorm ? v.toFixed(2) : (isSymlog ? invSymlog(v) : v).toExponential(2).replace('+', '')) },
-            { show: isDualY, scale: 'y2', side: 1, grid: { show: false }, size: 90, stroke: "#e67e22", values: (u, vals) => vals.map(v => isNorm ? v.toFixed(2) : (isSymlog ? invSymlog(v) : v).toExponential(2).replace('+', '')) }
+            { space: 60, values: [[3600*24, "{MM}-{DD}"], [1, "{HH}:{mm}:{ss}"]] },
+            { scale: 'y', stroke: isDualY ? "#2980b9" : "#333", values: (u, v) => v.map(n => isNorm ? n.toFixed(2) : (isSymlog ? invSymlog(n) : n).toExponential(2)) },
+            { show: isDualY, scale: 'y2', side: 1, stroke: "#e67e22", values: (u, v) => v.map(n => (isSymlog ? invSymlog(n) : n).toExponential(2)) }
         ],
         plugins: [wheelZoomPlugin(), panPlugin(), contextMenuPlugin()]
     };
@@ -234,21 +151,13 @@ function renderChart() {
 function updateDiffDisplay() {
     const cont = document.getElementById('pinned-data');
     if (diffPoints.length < 1) return;
-    let html = `<div style="display:flex; gap:20px; align-items:center; height:100%;">`;
+    let html = `<div style="display:flex; gap:15px;">`;
     diffPoints.forEach((p, i) => {
-        html += `<div style="border:1px solid #ccc; padding:8px; border-radius:4px; font-size:12px;"><b style="color:#2980b9;">P${i+1} (${uPlot.fmtDate("{HH}:{mm}:{ss}")(new Date(p.time * 1000))})</b><br>`;
-        p.vals.forEach((v, si) => { if (chart.series[si+1].show) html += `<div style="font-family:monospace;">${v.toExponential(2)}</div>`; });
-        html += `</div>`;
+        html += `<div style="border:1px solid #ccc;padding:5px;"><b>P${i+1}</b> (${uPlot.fmtDate("{HH}:{mm}:{ss}")(new Date(p.time*1000))})</div>`;
     });
     if (diffPoints.length === 2) {
-        html += `<div style="flex-grow:1; background:#ecf0f1; padding:8px; border-radius:4px; border-left:4px solid #e67e22;"><b style="color:#e67e22;">Difference (P2 - P1)</b><br>`;
-        columns.slice(1).forEach((name, i) => {
-            if (chart.series[i+1].show) {
-                const delta = diffPoints[1].vals[i] - diffPoints[0].vals[i];
-                const pct = diffPoints[0].vals[i] !== 0 ? ((delta / Math.abs(diffPoints[0].vals[i])) * 100).toFixed(2) : "∞";
-                html += `<div style="font-size:11px;"><b>${name}:</b> ${delta.toExponential()} <span style="color:${delta >= 0 ? 'red' : 'blue'};">(${delta >= 0 ? '+' : ''}${pct}%)</span></div>`;
-            }
-        });
+        html += `<div style="background:#eee;padding:5px;flex-grow:1;"><b>Diff:</b> `;
+        columns.slice(1).forEach((name, i) => { if (chart.series[i+1].show) html += `${name}: ${(diffPoints[1].vals[i] - diffPoints[0].vals[i]).toExponential(2)} | `; });
         html += `</div>`;
     }
     cont.innerHTML = html + `</div>`;
@@ -257,10 +166,8 @@ function updateDiffDisplay() {
 function prepareNormalizedData() {
     normData = [uData[0]];
     for (let i = 1; i < uData.length; i++) {
-        const series = uData[i];
-        let min = Math.min(...series), max = Math.max(...series);
-        const range = max - min || 1;
-        normData.push(series.map(v => (v - min) / range));
+        const s = uData[i], min = Math.min(...s), max = Math.max(...s), r = max - min || 1;
+        normData.push(s.map(v => (v - min) / r));
     }
     return normData;
 }
@@ -279,8 +186,8 @@ function createSidebar() {
 
 function initDatePickers(min, max) {
     const cfg = { enableTime: true, dateFormat: "Y-m-d H:i", time_24hr: true, minDate: new Date(min * 1000), maxDate: new Date(max * 1000) };
-    fpStart = flatpickr("#startDate", cfg);
-    fpEnd = flatpickr("#endDate", cfg);
+    fpStart = flatpickr("#startDate", cfg); fpEnd = flatpickr("#endDate", cfg);
+    fpStart.setDate(new Date(min*1000)); fpEnd.setDate(new Date(max*1000));
 }
 
 document.getElementById('scaleBtn').onclick = function() {
