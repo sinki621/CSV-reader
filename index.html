@@ -27,26 +27,23 @@
         #content { flex: 1; display: flex; flex-direction: column; background: white; min-width: 0; position: relative; }
         #chart-area { flex: 1; position: relative; width: 100%; height: 100%; }
 
-        /* --- 실시간 플로팅 범례 스타일 --- */
+        /* --- 실시간 상단 범례 스타일 --- */
         #overlay-legend {
             position: absolute;
             top: 15px;
             right: 15px;
-            background: rgba(255, 255, 255, 0.9);
+            background: rgba(255, 255, 255, 0.85);
             border: 1px solid #ccc;
             border-radius: 6px;
-            padding: 10px;
+            padding: 8px 12px;
             z-index: 50;
             pointer-events: none;
-            display: none; /* 데이터 로드 전 숨김 */
-            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-            min-width: 160px;
+            display: none;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         }
-        .ol-item { display: flex; align-items: center; margin-bottom: 4px; font-size: 12px; font-weight: bold; }
+        .ol-item { display: flex; align-items: center; margin-bottom: 4px; font-size: 12px; font-weight: bold; color: #333; }
         .ol-dot { width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; flex-shrink: 0; }
-        .ol-label { color: #444; margin-right: 10px; flex-grow: 1; white-space: nowrap; }
-        .ol-value { font-family: 'Consolas', monospace; color: #000; text-align: right; }
-        .ol-time { border-bottom: 1px solid #eee; margin-bottom: 6px; padding-bottom: 4px; font-size: 11px; color: #666; font-weight: bold; }
+        /* -------------------------- */
         
         #pinned-data { height: 120px; min-height: 120px; background: #f9f9f9; border-top: 2px solid #34495e; padding: 10px 15px; font-size: 12px; color: #2c3e50; font-family: monospace; overflow: auto; flex-shrink: 0; }
         .u-tooltip { position: absolute; background: rgba(0,0,0,0.8); color: white; padding: 5px; border-radius: 3px; font-size: 11px; pointer-events: none; z-index: 100; }
